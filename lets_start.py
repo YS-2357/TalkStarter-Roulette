@@ -1,9 +1,13 @@
 import streamlit as st
 import random
 import time
+from datetime import datetime
 
-# 주제 정의
+# ---------------------------
+# 기본 데이터
+# ---------------------------
 categories = ["여행", "요리", "취미", "혈액형", "MBTI", "영화/드라마", "반려동물", "음악", "패션", "기술/IT"]
+
 subtopics = {
     "여행": [
         "일본 vs 한국", "국내 여행 vs 해외 여행", "혼자 여행 vs 단체 여행", "계획 여행 vs 즉흥 여행",
@@ -54,7 +58,6 @@ subtopics = {
     ]
 }
 
-
 tmi = {
     "여행": "✈️ 제작자는 일본, 태국, 미국, 홍콩 등지를 여행했다.",
     "요리": "🍳 제작자는 설거지보다 요리를 더 잘한다.",
@@ -68,39 +71,95 @@ tmi = {
     "기술/IT": "💻 제작자는 갤럭시 유저이다."
 }
 
+# ---------------------------
 # 세션 초기화
-if 'main_topic' not in st.session_state:
+# ---------------------------
+if "main_topic" not in st.session_state:
     st.session_state.main_topic = None
-if 'final_subtopic' not in st.session_state:
+if "final_subtopic" not in st.session_state:
     st.session_state.final_subtopic = None
-if 'visited_main' not in st.session_state:
+if "visited_main" not in st.session_state:
     st.session_state.visited_main = []
-if 'visited_sub' not in st.session_state:
+if "visited_sub" not in st.session_state:
     st.session_state.visited_sub = []
+if "history" not in st.session_state:
+    st.session_state.history = []
 
+# ---------------------------
+# 유틸
+# ---------------------------
+def parse_vs(text: str):
+    if "vs" in text:
+        parts = [p.strip() for p in text.split("vs") if p.strip()]
+        if len(parts) >= 2:
+            return parts
+    return []
+
+def starter_questions(main_topic: str, subtopic: str):
+    items = parse_vs(subtopic)
+
+    # 비교형: "A vs B" 또는 "A vs B vs C ..."
+    if items:
+        items = [it for it in items if it]  # 공백 제거
+        # 2개 비교
+        if len(items) == 2:
+            a, b = items[0], items[1]
+            return [
+                f"3초 선택: {a} vs {b}?",
+                f"오늘 기준 딱 하나만 고른다면?",
+                f"가볍게 한마디 이유만 말해보기.",
+                f"입문자에게 먼저 권한다면 {a}랑 {b} 중 무엇?",
+                f"둘 다 좋다면, 먼저 떠오르는 쪽은?"
+            ]
+        # 3개 이상 비교
+        else:
+            listed = ", ".join(items[:4]) + (" 등" if len(items) > 4 else "")
+            top2 = ", ".join(items[:3])
+            return [
+                f"첫 선택: {listed} 중 하나만 골라보기.",
+                f"지금 당장 끌리는 순서 Top2만 말해보기.",
+                f"처음 시도한다면 어떤 걸로 시작할래?",
+                f"가볍게 한마디 이유만 덧붙이기.",
+                f"다음에 시도해볼 차선책 하나도 골라보기. ({top2} 중에서)"
+            ]
+
+    # 일반형: 비교문이 아닌 경우
+    s = subtopic
+    return [
+        f"첫 느낌 한 단어로 표현하면 '{s}'은?",
+        f"요즘 '{s}' 하면 떠오르는 소소한 순간 하나?",
+        f"'{s}'을 가볍게 즐기는 당신만의 루틴 한 가지?",
+        f"선호도 체크: 좋다 / 보통 / 글쎄요 중 하나!",
+        f"친구에게 한 문장으로 소개한다면 '{s}'은?"
+    ]
+
+
+def spin_animation(choices, count, delay, placeholder):
+    result = None
+    for _ in range(count):
+        result = random.choice(choices)
+        placeholder.markdown(f"### {result}")
+        time.sleep(delay)
+    return result
+
+# ---------------------------
+# 메인 화면
+# ---------------------------
 st.title("🎯 대화 주제 룰렛 | TalkStarter Roulette")
 
-# 대주제 룰렛
+# 대주제
 main_placeholder = st.empty()
 if st.session_state.main_topic is None:
     if st.button("👉 대주제 룰렛 돌리기"):
-        # 방문하지 않은 대주제 목록
-        available_main = [cat for cat in categories if cat not in st.session_state.visited_main]
-
-        # 모두 방문했으면 초기화
+        available_main = [c for c in categories if c not in st.session_state.visited_main]
         if not available_main:
             st.session_state.visited_main = []
-            available_main = categories
+            available_main = categories[:]
 
-        # 룰렛 애니메이션
-        for _ in range(15):
-            topic = random.choice(available_main)
-            main_placeholder.markdown(f"### 🎡 {topic}")
-            time.sleep(0.08)
-
+        topic = spin_animation(available_main, 15, 0.08, main_placeholder)
         st.session_state.main_topic = topic
         st.session_state.visited_main.append(topic)
-        st.session_state.visited_sub = []  # 소주제도 리셋
+        st.session_state.visited_sub = []
         main_placeholder.markdown(f"## 🎯 최종 대주제: **{topic}**")
 else:
     main_placeholder.markdown(f"## 🎯 대주제: **{st.session_state.main_topic}**")
@@ -109,28 +168,43 @@ else:
         st.session_state.final_subtopic = None
         st.session_state.visited_sub = []
 
-# 소주제 룰렛
+# 소주제
 if st.session_state.main_topic:
     sub_placeholder = st.empty()
     current_subtopics = subtopics[st.session_state.main_topic]
     available_sub = [s for s in current_subtopics if s not in st.session_state.visited_sub]
 
     if st.button("🎲 소주제 룰렛 돌리기"):
-        # 모두 방문했으면 초기화
         if not available_sub:
             st.session_state.visited_sub = []
-            available_sub = current_subtopics
+            available_sub = current_subtopics[:]
 
-        for _ in range(15):
-            sub = random.choice(available_sub)
-            sub_placeholder.markdown(f"#### 🌀 {sub}")
-            time.sleep(0.05)
-
+        sub = spin_animation(available_sub, 15, 0.05, sub_placeholder)
         st.session_state.final_subtopic = sub
         st.session_state.visited_sub.append(sub)
         sub_placeholder.markdown(f"### ✅ 최종 소주제: **{sub}**")
 
-# TMI 출력
+        st.session_state.history.append(
+            (st.session_state.main_topic, sub, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        )
+
+# TMI
 if st.session_state.main_topic:
     st.markdown("---")
-    st.caption(tmi.get(st.session_state.main_topic, "제작자의 TMI 정보가 없습니다."))
+    st.caption(tmi.get(st.session_state.main_topic, "TMI 정보가 없습니다."))
+
+# 대화 스타터
+if st.session_state.final_subtopic:
+    st.subheader("💬 대화 스타터")
+    qs = starter_questions(st.session_state.main_topic, st.session_state.final_subtopic)
+    for i, q in enumerate(qs, 1):
+        st.write(f"{i}. {q}")
+
+# 히스토리
+st.markdown("---")
+with st.expander("📜 선택 히스토리"):
+    if st.session_state.history:
+        for m, s, ts in reversed(st.session_state.history):
+            st.markdown(f"- [{ts}] **{m}** / {s}")
+    else:
+        st.info("아직 히스토리가 없습니다.")
